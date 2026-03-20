@@ -233,10 +233,13 @@ footer{text-align:center;padding:14px;font-size:11px;color:var(--g5);}
       <input class="si" placeholder="Buscar nombre..." oninput="eBus=this.value;rendEmps()">
       <select class="fs" onchange="eCC=this.value;rendEmps()" id="filtCC"><option value="">Todos los CC</option></select>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+    <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap">
       <button class="btn brd sm" onclick="borrarSelEmps()" id="btnDelEmps" style="display:none">&#128465; Eliminar seleccionados</button>
       <button class="btn bo sm" onclick="expEmpsXLSX()">&#8595; Excel Empleados</button>
+      <button class="btn bo sm" onclick="document.getElementById('fEmpsImp').click()">&#8679; Importar Excel</button>
+      <input type="file" id="fEmpsImp" style="display:none" accept=".xlsx,.xls" onchange="procEmpsXLSX(this.files[0])">
     </div>
+    <div id="resEmpsImp" style="margin-bottom:8px"></div>
     <table class="t"><thead><tr>
       <th style="width:32px"><input type="checkbox" id="chkAllEmps" onchange="toggleAllEmps(this)"></th>
       <th style="width:60px">N</th><th>Nombre</th><th>CC</th><th>Centro de Costo</th><th>Ingreso</th>
@@ -1082,6 +1085,100 @@ function saveEmp(){
 function borrarEmp(idx){
   if(!confirm('Eliminar empleado?'))return;
   emps.splice(idx,1);sg('emps',emps);calcYrender();rendEmps();
+}
+
+// Importar empleados desde Excel
+// Columnas: N Funcionario, CI, Nombre, CC, Centro de Costo (ignorado), Ingreso, Egreso
+function procEmpsXLSX(file){
+  if(!file) return;
+  if(!confirm('Importar empleados desde el archivo?\n\nLos empleados existentes con el mismo número serán actualizados. Los nuevos se agregarán.')) return;
+  tryXLSX(function(err){
+    if(err||!xlsxReady){alert('Se necesita internet la primera vez para cargar el lector de Excel.');return;}
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        var wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});
+        var ws=wb.Sheets[wb.SheetNames[0]];
+        var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        if(rows.length<2){alert('El archivo está vacío');return;}
+        // Detectar encabezados
+        var hdrs=rows[0].map(function(c){return String(c).trim().toLowerCase();});
+        function ci2(names){
+          for(var i=0;i<names.length;i++){
+            var idx=hdrs.findIndex(function(h){return h.indexOf(names[i].toLowerCase())>=0;});
+            if(idx>=0) return idx;
+          }
+          return -1;
+        }
+        var cNum  = ci2(['n funcionario','numero','funcionario','num','código','codigo']);
+        var cCI   = ci2(['ci','cedula','cédula','documento']);
+        var cNom  = ci2(['nombre','name']);
+        var cCC   = ci2(['cc','centro de costo','cost center']);
+        var cIng  = ci2(['ingreso','fecha ingreso','hire','inicio']);
+        var cEgr  = ci2(['egreso','fecha egreso','baja','egr']);
+        if(cNum<0||cNom<0){alert('No se encontraron las columnas N Funcionario y Nombre.\nEncabezados detectados: '+rows[0].join(', '));return;}
+        function parseFechaEmp(v){
+          if(!v||v==='') return '';
+          if(v instanceof Date) return v.toISOString().slice(0,10);
+          var s=String(v).trim();
+          if(s.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)){
+            var p=s.split('/');return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+          }
+          if(s.match(/^\d{4}-\d{2}-\d{2}/)) return s.slice(0,10);
+          return '';
+        }
+        var added=0, updated=0, skipped=0;
+        for(var ri=1;ri<rows.length;ri++){
+          var row=rows[ri];
+          var num=parseInt(row[cNum]);
+          if(isNaN(num)||num<=0){skipped++;continue;}
+          var nombre=String(row[cNom]||'').trim();
+          if(!nombre){skipped++;continue;}
+          var cc=cCC>=0?String(row[cCC]||'').trim():'';
+          // Si el CC no existe en la lista, usar el primero disponible
+          var ccValido=ccs.find(function(c){return c.id===cc;});
+          if(!ccValido&&ccs.length>0) cc=ccs[0].id;
+          var ingreso=cIng>=0?parseFechaEmp(row[cIng]):'';
+          var egreso =cEgr>=0?parseFechaEmp(row[cEgr]):'';
+          var existing=emps.find(function(e){return e.num===num;});
+          if(existing){
+            // Actualizar datos del existente
+            existing.ci     = cCI>=0?String(row[cCI]||'').trim():existing.ci||'';
+            existing.nombre = nombre;
+            existing.cc     = cc||existing.cc;
+            existing.ingreso= ingreso||existing.ingreso;
+            existing.egreso = egreso||existing.egreso||null;
+            updated++;
+          } else {
+            emps.push({
+              num:num,
+              ci:cCI>=0?String(row[cCI]||'').trim():'',
+              nombre:nombre,
+              cc:cc,
+              ingreso:ingreso,
+              sueldo:0,
+              diasLic:0,
+              diasPend:0,
+              afap:'no',
+              egreso:egreso||null
+            });
+            added++;
+          }
+        }
+        sg('emps',emps);
+        var res=document.getElementById('resEmpsImp');
+        if(res) res.innerHTML='<div style="background:var(--tbg);border:1px solid var(--tri);border-radius:8px;padding:10px 14px;font-size:12px">'
+          +'<strong style="color:var(--t)">&#10003; Importación completada</strong>'
+          +' &nbsp;|&nbsp; Nuevos: <strong>'+added+'</strong>'
+          +' &nbsp;|&nbsp; Actualizados: <strong>'+updated+'</strong>'
+          +(skipped?' &nbsp;|&nbsp; Saltados: '+skipped:'')
+          +'<br><span style="color:var(--g5)">Los días de licencia se calculan automáticamente por Ley 12.590 según fecha de ingreso</span>'
+          +'</div>';
+        calcYrender();rendEmps();
+      }catch(ex){alert('Error al leer archivo: '+ex.message);}
+    };
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 // Importar licencias desde Excel
