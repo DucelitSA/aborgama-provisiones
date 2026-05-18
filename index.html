@@ -483,25 +483,7 @@ footer{text-align:center;padding:14px;font-size:11px;color:var(--g5);}
         <div class="fp"><label class="fl">N Funcionario</label><input class="fi" id="eNum" type="number"></div>
         <div class="fp"><label class="fl">CI</label><input class="fi" id="eCI"></div>
         <div class="fp full"><label class="fl">Nombre</label><input class="fi" id="eNom"></div>
-        <div class="fp"><label class="fl">Centro de Costo</label><select class="fi" id="eCC">
-        <option value="1.01">1.01 — Biogás Maldonado</option>
-        <option value="1.02">1.02 — Relleno Sanitario</option>
-        <option value="1.03">1.03 — Maldonado</option>
-        <option value="1.04">1.04 — CC 1.04</option>
-        <option value="1.07">1.07 — CC 1.07</option>
-        <option value="2.01">2.01 — Planta Sanitarios</option>
-        <option value="2.02">2.02 — Transporte Sanitarios</option>
-        <option value="2.03">2.03 — Biogás Montevideo</option>
-        <option value="2.05">2.05 — Residuos Urbanos</option>
-        <option value="2.07">2.07 — CC 2.07</option>
-        <option value="2.12">2.12 — CC 2.12</option>
-        <option value="2.14">2.14 — Obra en Curso Hosp.</option>
-        <option value="2.15">2.15 — Residuos Urbanos Nordex</option>
-        <option value="2.17">2.17 — CIU</option>
-        <option value="2.18">2.18 — CC 2.18</option>
-        <option value="3.00">3.00 — Administración</option>
-        <option value="4.00">4.00 — Directorio</option>
-        <option value="6.00">6.00 — Residuos Urbanos ANP</option></select></div>
+        <div class="fp"><label class="fl">Centro de Costo</label><select class="fi" id="eCC"></select></div>
         <div class="fp"><label class="fl">Fecha Ingreso</label><input class="fi" type="date" id="eIng"></div>
         <div class="fp"><label class="fl">Sueldo Nominal</label><input class="fi" type="number" id="eSuel" step="0.01"></div>
         <div class="fp">
@@ -1111,6 +1093,9 @@ function filtEst(v,btn){
 }
 function abrirEmp(idx){
   document.getElementById('eIdx').value=idx;
+  // Siempre poblar CC dinámicamente desde la config actual
+  var ccActual = idx===-1 ? (ccs[0]?ccs[0].id:'') : (emps[idx]?emps[idx].cc:'');
+  poblarSelectCC('eCC', ccActual);
   if(idx===-1){
     document.getElementById('mEmpT').textContent='Nuevo Empleado';
     ['eNum','eCI','eNom','eSuel','eIng','eEgr'].forEach(function(id){document.getElementById(id).value='';});
@@ -1123,8 +1108,7 @@ function abrirEmp(idx){
     document.getElementById('eSuel').value=e.sueldo||0;document.getElementById('eDL').value=e.diasLic||0;
     document.getElementById('eDP').value=e.diasPend||0;document.getElementById('eAFAP').value=e.afap||'no';
     document.getElementById('eEgr').value=e.egreso||'';
-    var eSel=document.getElementById('eCC');
-    if(eSel)for(var i=0;i<eSel.options.length;i++){if(eSel.options[i].value===e.cc){eSel.selectedIndex=i;break;}}
+    // CC ya fue seteado por poblarSelectCC al inicio
   }
   prevDL();document.getElementById('mEmp').classList.add('on');
 }
@@ -1412,6 +1396,18 @@ function calcDiasAuto(){
   if(hh<dd) return;
   // Total días laborables de toda la licencia
   document.getElementById('lDTom').value=diasLaborables(dd,hh);
+}
+function poblarSelectCC(selId, valorActual){
+  var sel=document.getElementById(selId);
+  if(!sel) return;
+  sel.innerHTML='';
+  ccs.slice().sort(function(a,b){return a.id>b.id?1:-1;}).forEach(function(c){
+    var opt=document.createElement('option');
+    opt.value=c.id;
+    opt.textContent=c.id+' — '+c.n;
+    if(c.id===valorActual) opt.selected=true;
+    sel.appendChild(opt);
+  });
 }
 function autoNom(){
   var num=parseInt(document.getElementById('lNum').value)||0;
