@@ -495,6 +495,28 @@ footer{text-align:center;padding:14px;font-size:11px;color:var(--g5);}
         <div class="fp"><label class="fl">AFAP</label><select class="fi" id="eAFAP"><option value="no">No</option><option value="si">Si</option></select></div>
         <div class="fp"><label class="fl">Fecha Egreso</label><input class="fi" type="date" id="eEgr"></div>
       </div>
+      <!-- Historial de períodos anteriores -->
+      <div id="ePeriodosBox" style="display:none;margin-top:12px">
+        <div style="font-size:12px;font-weight:600;color:var(--t);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--brd)">📋 Períodos anteriores (liquidados)</div>
+        <div id="ePeriodosLista" style="font-size:12px;color:var(--g5)"></div>
+        <div style="margin-top:8px;padding:6px 8px;background:var(--tbg);border-radius:6px;font-size:11px;color:var(--g5)">
+          ⚠️ La antigüedad y los días de licencia se calculan desde la <strong>última fecha de ingreso</strong>.
+        </div>
+      </div>
+      <!-- Botón reingreso (solo visible al editar) -->
+      <div id="eReingBox" style="display:none;margin-top:10px">
+        <div style="font-size:12px;font-weight:600;color:var(--t);margin-bottom:6px">Registrar Reingreso</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div>
+            <label class="fl" style="font-size:11px">Nueva fecha de ingreso</label>
+            <input class="fi" type="date" id="eReingFecha" style="width:160px">
+          </div>
+          <button class="btn bp sm" onclick="confirmarReingreso()" style="margin-top:14px">Registrar Reingreso</button>
+        </div>
+        <div style="font-size:11px;color:var(--g5);margin-top:4px">
+          Esto archivará el período actual y reiniciará la antigüedad desde la nueva fecha.
+        </div>
+      </div>
       <input type="hidden" id="eIdx">
     </div>
     <div class="mft"><button class="btn bo" onclick="cm('mEmp')">Cancelar</button><button class="btn bp" onclick="saveEmp()">Guardar</button></div>
@@ -832,11 +854,22 @@ function activoEn(e,m,a){if(!e.egreso)return true;return new Date(e.egreso)>=new
 
 function diasUY(ingreso){
   if(!ingreso)return 20;
+  // Antigüedad desde el ÚLTIMO ingreso (período activo)
   var y=(new Date()-new Date(ingreso))/(365.25*86400000);
   if(y<5)return 20;if(y<10)return 21;if(y<15)return 22;
   if(y<20)return 23;if(y<25)return 24;if(y<30)return 25;if(y<35)return 26;return 27;
 }
 function getDL(e){return(e.diasLic&&e.diasLic>0)?e.diasLic:diasUY(e.ingreso);}
+
+// Guardar período anterior al reingresar un empleado
+function guardarPeriodoAnterior(e, nuevoIngreso){
+  if(!e.ingreso) return;
+  var periodos = e.periodos ? e.periodos.slice() : [];
+  periodos.push({ingreso: e.ingreso, egreso: e.egreso || null});
+  e.periodos = periodos;
+  e.ingreso = nuevoIngreso;
+  e.egreso = null;
+}
 // Tope AFAP vigente para un mes/año dado
 function getAfap(m,a){
   var fecha=new Date(a,m-1,1);
@@ -1100,6 +1133,8 @@ function abrirEmp(idx){
     document.getElementById('mEmpT').textContent='Nuevo Empleado';
     ['eNum','eCI','eNom','eSuel','eIng','eEgr'].forEach(function(id){document.getElementById(id).value='';});
     document.getElementById('eDL').value='0';document.getElementById('eDP').value='0';document.getElementById('eAFAP').value='no';
+    document.getElementById('ePeriodosBox').style.display='none';
+    document.getElementById('eReingBox').style.display='none';
   }else{
     var e=emps[idx];
     document.getElementById('mEmpT').textContent='Editar - '+e.nombre;
@@ -1108,6 +1143,26 @@ function abrirEmp(idx){
     document.getElementById('eSuel').value=e.sueldo||0;document.getElementById('eDL').value=e.diasLic||0;
     document.getElementById('eDP').value=e.diasPend||0;document.getElementById('eAFAP').value=e.afap||'no';
     document.getElementById('eEgr').value=e.egreso||'';
+    // Mostrar períodos anteriores si existen
+    var periodos=e.periodos||[];
+    var pbx=document.getElementById('ePeriodosBox');
+    var rbx=document.getElementById('eReingBox');
+    if(periodos.length>0){
+      pbx.style.display='block';
+      var html='<table style="width:100%;font-size:12px;border-collapse:collapse">'
+        +'<tr style="color:var(--g5)"><td style="padding:2px 6px">Ingreso</td><td style="padding:2px 6px">Egreso</td><td style="padding:2px 6px">Estado</td></tr>';
+      periodos.forEach(function(p){
+        html+='<tr><td style="padding:2px 6px">'+p.ingreso+'</td><td style="padding:2px 6px">'+(p.egreso||'-')+'</td><td style="padding:2px 6px;color:var(--g5)">Liquidado</td></tr>';
+      });
+      html+='<tr style="font-weight:600"><td style="padding:2px 6px">'+e.ingreso+'</td><td style="padding:2px 6px">'+(e.egreso||'-')+'</td><td style="padding:2px 6px;color:var(--g)">Activo</td></tr>';
+      html+='</table>';
+      document.getElementById('ePeriodosLista').innerHTML=html;
+    }else{
+      pbx.style.display='none';
+    }
+    // Mostrar botón reingreso solo si el empleado tiene egreso (está dado de baja)
+    rbx.style.display=(e.egreso?'block':'none');
+    document.getElementById('eReingFecha').value='';
     // CC ya fue seteado por poblarSelectCC al inicio
   }
   prevDL();document.getElementById('mEmp').classList.add('on');
@@ -1143,6 +1198,27 @@ function saveEmp(){
 function borrarEmp(idx){
   if(!confirm('Eliminar empleado?'))return;
   emps.splice(idx,1);sg('emps',emps);calcYrender();rendEmps();
+}
+
+function confirmarReingreso(){
+  var idx=parseInt(document.getElementById('eIdx').value);
+  if(idx<0||idx>=emps.length){alert('Error: empleado no encontrado');return;}
+  var nuevaFecha=document.getElementById('eReingFecha').value;
+  if(!nuevaFecha){alert('Ingresá la nueva fecha de ingreso');return;}
+  var e=emps[idx];
+  if(!confirm('¿Registrar reingreso de '+e.nombre+'?\n\n'
+    +'Se archivará el período actual:\n  Ingreso: '+e.ingreso+'\n  Egreso: '+(e.egreso||'-')
+    +'\n\nNuevo período desde: '+nuevaFecha
+    +'\n\nLa antigüedad y los días de licencia se calcularán desde la nueva fecha.')) return;
+  // Archivar período actual y limpiar egreso
+  guardarPeriodoAnterior(e, nuevaFecha);
+  // Reactivar empleado
+  emps[idx]=e;
+  sg('emps',emps);
+  cm('mEmp');
+  calcYrender();
+  rendEmps();
+  alert('Reingreso registrado correctamente.\nPeríodo anterior archivado.');
 }
 
 // Importar empleados desde Excel
@@ -1496,6 +1572,7 @@ function verDet(num){
     '<table class="t" style="margin-bottom:14px">'
     +'<tr><td><strong>CC</strong></td><td>'+e.cc+' - '+ccN(e.cc)+'</td></tr>'
     +'<tr><td><strong>Ingreso</strong></td><td>'+(e.ingreso||'-')+'</td></tr>'
+    +((e.periodos&&e.periodos.length>0)?'<tr><td><strong>Períodos ant.</strong></td><td style="font-size:11px;color:var(--g5)">'+e.periodos.length+' período(s) liquidado(s)</td></tr>':'')
     +'<tr><td><strong>Dias Licencia Anual</strong></td><td>'+getDL(e)+((!e.diasLic||e.diasLic===0)?' (auto Ley 12.590)':'')+'</td></tr>'
     +'<tr><td><strong>Dias prov./mes</strong></td><td>'+(p.dPM||0).toFixed(4)+'</td></tr>'
     +'<tr><td><strong>Dias en lic. este mes</strong></td><td>'+(p.dTM||0)+'</td></tr>'
