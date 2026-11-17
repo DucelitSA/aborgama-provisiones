@@ -1008,7 +1008,7 @@ function rendDash(){
     ccs.forEach(function(c){dFiltEl.innerHTML+='<option value="'+c.id+'"'+(c.id===curCC?' selected':'')+'>'+c.id+' - '+c.n+'</option>';});
   }
   var filtCC=dFiltEl?dFiltEl.value:'';
-  var act=emps.filter(function(e){return activo(e)&&(!filtCC||e.cc===filtCC);});
+  var act=emps.filter(function(e){return activoEn(e,mes,anio)&&(!filtCC||e.cc===filtCC);});
   var tL=0,tS=0,tA=0,tBSV=0,tBAG=0;
   var tPres=0,tPresAnt=0,tHext=0,tAgPag=0,tViat=0,tPrima=0,tSueldo=0;
   act.forEach(function(e){
@@ -1164,15 +1164,25 @@ function rendDash(){
   if(dAltM)dAltM.textContent=altasMes;if(dBajM)dBajM.textContent=bajasMes;
   var tbAB=document.getElementById('tbAltasBajas');
   if(tbAB){
-    // Calcular dotacion acumulada al inicio del año
-    var dotBase=emps.filter(function(e){
-      if(!e.ingreso)return false;
-      var pi=e.ingreso.split('-');return parseInt(pi[0])<anoActual;
-    }).length;
-    // Sumar periodos anteriores activos antes del año
-    var dot=dotBase;var hAB='';
+    // Dotación real al cierre de cada mes:
+    // empleados con ingreso <= fin del mes y sin egreso o egreso >= inicio del mes
+    function dotAlCierre(m2,a2){
+      var fin=new Date(a2,m2,0);
+      var ini=new Date(a2,m2-1,1);
+      var count=0;
+      emps.forEach(function(e){
+        if(!e.ingreso)return;
+        var ing=new Date(e.ingreso);
+        if(ing>fin)return; // ingresó después de este mes
+        var egr=e.egreso?new Date(e.egreso):null;
+        if(egr&&egr<ini)return; // egresó antes de este mes
+        count++;
+      });
+      return count;
+    }
+    var dot=0;var hAB='';
     for(var m2=1;m2<=12;m2++){
-      dot+=porMes[m2].altas-porMes[m2].bajas;
+      dot=dotAlCierre(m2,anoActual);
       var isFut=(m2>mes&&anoActual>=new Date().getFullYear());
       var rowSt=m2===mes?'font-weight:700;background:var(--tbg2,var(--tbg))':'';
       hAB+='<tr style="'+rowSt+(isFut?';opacity:0.4':'')+'"><td>'+(MNa[m2-1]||m2)+'</td>'
