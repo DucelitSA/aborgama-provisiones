@@ -174,7 +174,7 @@ footer{text-align:center;padding:14px;font-size:11px;color:var(--g5);}
     <div class="card" style="border-left-color:#7B1FA2">
       <div class="cl" style="color:#7B1FA2">Suma Base Lic/SV</div>
       <div class="cv" id="dBaseSV">-</div>
-      <div class="cs">sueldo+pres+HE+viat+prima</div>
+      <div class="cs">sueldo+pres+pres.ant+HE+viat+prima</div>
     </div>
     <div class="card" style="border-left-color:#E65100">
       <div class="cl" style="color:#E65100">Suma Base Aguinaldo</div>
@@ -189,11 +189,36 @@ footer{text-align:center;padding:14px;font-size:11px;color:var(--g5);}
     <div class="card"><div class="cl">Despidos</div><div class="cv" id="dAgPag">-</div></div>
     <div class="card r"><div class="cl">Viaticos</div><div class="cv" id="dViat">-</div></div>
   </div>
+  <!-- Partidas del mes -->
+  <div class="sh" style="margin-top:8px"><div class="st">Partidas del <span>Mes</span></div></div>
+  <div class="tw"><table class="t"><thead><tr>
+    <th>Partida</th><th class="nr">Total</th><th class="nr">% sobre Sueldo</th>
+  </tr></thead><tbody id="tbPartidas"></tbody></table></div>
+
+  <!-- Comparativa mes anterior -->
+  <div class="sh" style="margin-top:8px"><div class="st">Comparativa con mes <span>Anterior</span></div></div>
+  <div class="tw"><table class="t"><thead><tr>
+    <th>Partida</th><th class="nr" id="thMesAnt">-</th><th class="nr" id="thMesAct">-</th><th class="nr">Diferencia</th>
+  </tr></thead><tbody id="tbCompar"></tbody></table></div>
+
+  <!-- Por Centro de Costo -->
   <div class="sh"><div class="st">Por <span>Centro de Costo</span></div></div>
   <div class="tw"><table class="t"><thead><tr>
     <th>CC</th><th>Descripcion</th><th>#</th>
     <th class="nr">Prov. Lic.</th><th class="nr">Prov. SV</th><th class="nr">Prov. Ag.</th><th class="nr">Total</th>
   </tr></thead><tbody id="tbDash"></tbody></table></div>
+
+  <!-- Altas y Bajas -->
+  <div class="sh" style="margin-top:8px"><div class="st">Altas y Bajas de <span>Personal</span></div></div>
+  <div class="cards" style="grid-template-columns:repeat(4,1fr)">
+    <div class="card b"><div class="cl">Altas (año)</div><div class="cv" id="dAltas">-</div></div>
+    <div class="card r"><div class="cl">Bajas (año)</div><div class="cv" id="dBajas">-</div></div>
+    <div class="card o"><div class="cl">Altas este mes</div><div class="cv" id="dAltasMes">-</div></div>
+    <div class="card"><div class="cl">Bajas este mes</div><div class="cv" id="dBajasMes">-</div></div>
+  </div>
+  <div class="tw" style="margin-top:8px"><table class="t"><thead><tr>
+    <th>Mes</th><th class="nr">Altas</th><th class="nr">Bajas</th><th class="nr">Dotación</th>
+  </tr></thead><tbody id="tbAltasBajas"></tbody></table></div>
 </section>
 
 <!-- EMPLEADOS -->
@@ -985,13 +1010,21 @@ function rendDash(){
   var filtCC=dFiltEl?dFiltEl.value:'';
   var act=emps.filter(function(e){return activo(e)&&(!filtCC||e.cc===filtCC);});
   var tL=0,tS=0,tA=0,tBSV=0,tBAG=0;
-  var tPres=0,tHext=0,tAgPag=0,tViat=0;
+  var tPres=0,tPresAnt=0,tHext=0,tAgPag=0,tViat=0,tPrima=0,tSueldo=0;
   act.forEach(function(e){
     var p=prov[e.num]||{};
     tL+=p.licTotal||p.lic||0;tS+=p.svTotal||p.sv||0;tA+=p.agTotal||p.ag||0;
     tBSV+=p.bSV||0;tBAG+=p.bAg||0;
     var entry=getHE(e.num,mes,anio);
-    if(entry){tPres+=entry.pres||0;tHext+=entry.hext||0;tAgPag+=entry.desp||0;tViat+=entry.viat||0;}
+    if(entry){
+      tSueldo+=entry.s||0;
+      tPres+=entry.pres||0;
+      tPresAnt+=entry.presAnt||0;
+      tHext+=entry.hext||0;
+      tAgPag+=entry.desp||0;
+      tViat+=entry.viat||0;
+      tPrima+=(entry.bsv||0)-(entry.s||0)-(entry.pres||0)-(entry.presAnt||0)-(entry.hext||0)-(entry.viat||0);
+    }
   });
   document.getElementById('dEmp').textContent=act.length;
   document.getElementById('dLic').textContent=fm(tL);
@@ -1004,6 +1037,79 @@ function rendDash(){
   if(document.getElementById('dHext'))  document.getElementById('dHext').textContent=fm(tHext);
   if(document.getElementById('dAgPag')) document.getElementById('dAgPag').textContent=fm(tAgPag);
   if(document.getElementById('dViat'))  document.getElementById('dViat').textContent=fm(tViat);
+
+  // --- Tabla Partidas del Mes ---
+  var tbPart=document.getElementById('tbPartidas');
+  if(tbPart){
+    var pct=function(v){return tSueldo>0?(v/tSueldo*100).toFixed(1)+'%':'-';};
+    var partidas=[
+      ['Sueldo base',tSueldo],
+      ['Presentismo',tPres],
+      ['Pres. Antüedad (G.19.601)',tPresAnt],
+      ['Horas Extras',tHext],
+      ['Viáticos',tViat],
+      ['Prima',tPrima>0?tPrima:0],
+      ['Sal. Vacacional (cobrado)',tBAG-tBSV],
+      ['<strong>Base Lic/SV</strong>',tBSV,'','font-weight:700'],
+      ['<strong>Base Aguinaldo</strong>',tBAG,'','font-weight:700'],
+      ['<strong>Prov. Licencia (c/cargas)</strong>',tL,'','color:var(--ora);font-weight:700'],
+      ['<strong>Prov. Sal. Vacacional</strong>',tS,'','color:var(--blu);font-weight:700'],
+      ['<strong>Prov. Aguinaldo (c/BPS)</strong>',tA,'','color:#7B1FA2;font-weight:700'],
+      ['<strong>TOTAL PROVISIONES</strong>',tL+tS+tA,'','color:var(--red);font-weight:700'],
+    ];
+    var hp='';
+    partidas.forEach(function(r){
+      var st=r[3]?(' style="'+r[3]+'"'):'';
+      hp+='<tr><td'+st+'>'+r[0]+'</td>'
+        +'<td class="nr"'+st+'>'+fm(r[1])+'</td>'
+        +'<td class="nr" style="color:var(--g5);font-size:11px">'+pct(r[1])+'</td></tr>';
+    });
+    tbPart.innerHTML=hp;
+  }
+
+  // --- Comparativa mes anterior ---
+  var mesAnt=mes>1?mes-1:12, anioAnt=mes>1?anio:anio-1;
+  var actAnt=emps.filter(function(e){return activoEn(e,mesAnt,anioAnt)&&(!filtCC||e.cc===filtCC);});
+  var ant={sueldo:0,pres:0,presAnt:0,hext:0,viat:0,prima:0,bsv:0,bag:0,lic:0,sv:0,ag:0};
+  actAnt.forEach(function(e){
+    var entry=getHE(e.num,mesAnt,anioAnt);
+    var p=calcProvEmp(e,mesAnt,anioAnt);
+    if(entry){
+      ant.sueldo+=entry.s||0;ant.pres+=entry.pres||0;ant.presAnt+=entry.presAnt||0;
+      ant.hext+=entry.hext||0;ant.viat+=entry.viat||0;
+      ant.prima+=(entry.bsv||0)-(entry.s||0)-(entry.pres||0)-(entry.presAnt||0)-(entry.hext||0)-(entry.viat||0);
+      ant.bsv+=entry.bsv||0;ant.bag+=entry.bag||0;
+    }
+    ant.lic+=p.licTotal||p.lic||0;ant.sv+=p.svTotal||p.sv||0;ant.ag+=p.agTotal||p.ag||0;
+  });
+  var MNa=MN||['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic'];
+  var lblAnt=(MNa[mesAnt-1]||mesAnt)+' '+anioAnt;
+  var lblAct=(MNa[mes-1]||mes)+' '+anio;
+  var thMA=document.getElementById('thMesAnt'),thMC=document.getElementById('thMesAct');
+  if(thMA)thMA.textContent=lblAnt;if(thMC)thMC.textContent=lblAct;
+  var tbComp=document.getElementById('tbCompar');
+  if(tbComp){
+    var cur={sueldo:tSueldo,pres:tPres,presAnt:tPresAnt,hext:tHext,viat:tViat,
+      prima:tPrima>0?tPrima:0,bsv:tBSV,bag:tBAG,lic:tL,sv:tS,ag:tA};
+    var rows2=[
+      ['Sueldo base','sueldo'],['Presentismo','pres'],['Pres. Ant (G.19.601)','presAnt'],
+      ['Horas Extras','hext'],['Vi\u00e1ticos','viat'],['Prima','prima'],
+      ['Base Lic/SV','bsv'],['Prov. Licencia','lic'],['Prov. SV','sv'],['Prov. Aguinaldo','ag'],
+    ];
+    var hc='';
+    rows2.forEach(function(r){
+      var va=ant[r[1]]||0,vc=cur[r[1]]||0,df=vc-va;
+      var clr=df>0.5?'color:#2E7D32':df<-0.5?'color:var(--red)':'color:var(--g5)';
+      var sig=df>=0?'+':'';
+      hc+='<tr><td>'+r[0]+'</td>'
+        +'<td class="nr" style="color:var(--g6)">'+fm(va)+'</td>'
+        +'<td class="nr">'+fm(vc)+'</td>'
+        +'<td class="nr" style="'+clr+';font-weight:600">'+sig+fm(df)+'</td></tr>';
+    });
+    tbComp.innerHTML=hc;
+  }
+
+  // --- Por CC ---
   var byCC={};
   act.forEach(function(e){
     if(!byCC[e.cc])byCC[e.cc]={l:0,s:0,a:0,n:0};
@@ -1020,6 +1126,62 @@ function rendDash(){
       +'<td class="nr">'+fm(d.a)+'</td><td class="nr"><strong>'+fm(d.l+d.s+d.a)+'</strong></td></tr>';
   });
   document.getElementById('tbDash').innerHTML=h;
+
+  // --- Altas y Bajas ---
+  var hoy=new Date();
+  var anoActual=anio;
+  var altasAnio=0,bajasAnio=0,altasMes=0,bajasMes=0;
+  var porMes={};
+  for(var mm=1;mm<=12;mm++)porMes[mm]={altas:0,bajas:0};
+  emps.forEach(function(e){
+    // Altas
+    if(e.ingreso){
+      var pi=e.ingreso.split('-');
+      if(pi.length>=2){var ya=parseInt(pi[0]),ma=parseInt(pi[1]);
+        if(ya===anoActual){altasAnio++;if(porMes[ma])porMes[ma].altas++;if(ma===mes)altasMes++;}}
+    }
+    // Altas periodos anteriores
+    if(e.periodos)e.periodos.forEach(function(per){
+      if(per.ingreso){var pi2=per.ingreso.split('-');
+        if(pi2.length>=2){var ya2=parseInt(pi2[0]),ma2=parseInt(pi2[1]);
+          if(ya2===anoActual){altasAnio++;if(porMes[ma2])porMes[ma2].altas++;}}}
+    });
+    // Bajas
+    if(e.egreso){
+      var pe=e.egreso.split('-');
+      if(pe.length>=2){var ye=parseInt(pe[0]),me2=parseInt(pe[1]);
+        if(ye===anoActual){bajasAnio++;if(porMes[me2])porMes[me2].bajas++;if(me2===mes)bajasMes++;}}
+    }
+    if(e.periodos)e.periodos.forEach(function(per){
+      if(per.egreso){var pe2=per.egreso.split('-');
+        if(pe2.length>=2){var ye2=parseInt(pe2[0]),me3=parseInt(pe2[1]);
+          if(ye2===anoActual){bajasAnio++;if(porMes[me3])porMes[me3].bajas++;}}}
+    });
+  });
+  var dAlt=document.getElementById('dAltas'),dBaj=document.getElementById('dBajas');
+  var dAltM=document.getElementById('dAltasMes'),dBajM=document.getElementById('dBajasMes');
+  if(dAlt)dAlt.textContent=altasAnio;if(dBaj)dBaj.textContent=bajasAnio;
+  if(dAltM)dAltM.textContent=altasMes;if(dBajM)dBajM.textContent=bajasMes;
+  var tbAB=document.getElementById('tbAltasBajas');
+  if(tbAB){
+    // Calcular dotacion acumulada al inicio del año
+    var dotBase=emps.filter(function(e){
+      if(!e.ingreso)return false;
+      var pi=e.ingreso.split('-');return parseInt(pi[0])<anoActual;
+    }).length;
+    // Sumar periodos anteriores activos antes del año
+    var dot=dotBase;var hAB='';
+    for(var m2=1;m2<=12;m2++){
+      dot+=porMes[m2].altas-porMes[m2].bajas;
+      var isFut=(m2>mes&&anoActual>=new Date().getFullYear());
+      var rowSt=m2===mes?'font-weight:700;background:var(--tbg2,var(--tbg))':'';
+      hAB+='<tr style="'+rowSt+(isFut?';opacity:0.4':'')+'"><td>'+(MNa[m2-1]||m2)+'</td>'
+        +'<td class="nr" style="color:#2E7D32">'+(porMes[m2].altas||'-')+'</td>'
+        +'<td class="nr" style="color:var(--red)">'+(porMes[m2].bajas||'-')+'</td>'
+        +'<td class="nr">'+dot+'</td></tr>';
+    }
+    tbAB.innerHTML=hAB;
+  }
 }
 
 function rendEmps(){
@@ -1717,12 +1879,35 @@ function procPlanilla(file){
             upd++;
           }else nf.push(num);
         }
+        // --- Alertas de inconsistencias ---
+        var alertas=[];
+        Object.keys(hist).forEach(function(numStr){
+          var num=parseInt(numStr);
+          var clave=iA+'_'+iM;
+          var entry=hist[num][clave];
+          if(!entry)return;
+          // Buscar mes anterior
+          var mAnt=iM>1?iM-1:12,aAnt=iM>1?iA:iA-1;
+          var claveAnt=aAnt+'_'+mAnt;
+          var ant=hist[num][claveAnt];
+          if(ant&&ant.s>0&&entry.s>0){
+            var cambio=(entry.s-ant.s)/ant.s;
+            if(cambio<-0.3)alertas.push('&#9888; N°'+num+': sueldo cayó '+Math.abs(Math.round(cambio*100))+'% vs mes anterior ('+fm(ant.s)+' → '+fm(entry.s)+')');
+            if(cambio>0.5)alertas.push('&#8505; N°'+num+': sueldo subió '+Math.round(cambio*100)+'% vs mes anterior ('+fm(ant.s)+' → '+fm(entry.s)+')');
+          }
+          if(entry.s>0&&entry.s<1000)alertas.push('&#9888; N°'+num+': sueldo muy bajo ('+fm(entry.s)+') — posible error de tipeo');
+          if(entry.s>500000)alertas.push('&#9888; N°'+num+': sueldo inusualmente alto ('+fm(entry.s)+')');
+        });
+        // Empleados en planilla que no están en el sistema
+        var alertasBadge=alertas.length>0?'<span style="color:var(--red)"> • '+alertas.length+' alerta'+(alertas.length>1?'s':'')+'</span>':'';
         sg('emps',emps);sg('hist',hist);
         document.getElementById('resImp').innerHTML='<div style="background:var(--tbg);border:1px solid var(--tri);border-radius:8px;padding:12px">'
-          +'<strong style="color:var(--t)">Importado '+MN[iM-1]+' '+iA+'</strong><br>'
+          +'<strong style="color:var(--t)">Importado '+MN[iM-1]+' '+iA+'</strong>'+alertasBadge+'<br>'
           +'<span style="font-size:12px">Actualizados: '+upd
-          +(nf.length?' No encontrados: '+nf.slice(0,6).join(', ')+(nf.length>6?'...':''): '')
-          +'</span></div>';
+          +(nf.length?' • No encontrados: '+nf.slice(0,6).join(', ')+(nf.length>6?'...':''): '')
+          +'</span>'
+          +(alertas.length?'<ul style="margin:6px 0 0;padding-left:18px;font-size:11px;color:var(--ora)">'+alertas.map(function(a){return '<li>'+a+'</li>';}).join('')+'</ul>':'')
+          +'</div>';
         calcProv();rendHist();rendProv();rendAs();rendDash();
       }catch(ex){alert('Error al leer archivo: '+ex.message);}
     };
