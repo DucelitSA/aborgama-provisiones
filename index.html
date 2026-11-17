@@ -342,7 +342,7 @@ footer{text-align:center;padding:14px;font-size:11px;color:var(--g5);}
     <div id="resImp" style="margin-top:12px"></div>
     <div style="background:#E3F2FD;border:1px solid #BBDEFB;border-radius:8px;padding:10px 14px;font-size:12px;color:var(--blu);margin-top:14px">
       <strong>Bases que se extraen de la hoja Planilla:</strong><br>
-      Base Lic/SV = Sueldo + Presentismo + Horas Extras + Viaticos + Prima<br>
+      Base Lic/SV = Sueldo + Presentismo + Pres.Ant (G.19.601) + Horas Extras + Vi&aacute;ticos + Prima<br>
       Base Aguinaldo = Base Lic/SV + Salario Vacacional cobrado
     </div>
   </div>
@@ -1690,6 +1690,8 @@ function procPlanilla(file){
         var cPr=ci(['Prima ','Prima','R']);
         var cSV=ci(['S.Vacacional','Vacacional','Sal. Vacacional','O']);
         var cDesp=ci(['Despidos','S']);
+        // 334 Partida 1 - Pres. Ant G.19.601: presentismo por antig\u00fcedad, integra base Lic/SV
+        var cPresAnt=ci(['334 Partida 1 - Pres. Ant G.19.601','334 Partida 1','Pres. Ant G.19.601','Pres Ant G.19.601']);
         var upd=0,nf=[];
         for(var ri=hdrRow+1;ri<rows.length;ri++){
           var row=rows[ri];
@@ -1701,12 +1703,13 @@ function procPlanilla(file){
           var pr=cPr>=0?parseFloat(row[cPr])||0:0;
           var sv=cSV>=0?parseFloat(row[cSV])||0:0;
           var desp=cDesp>=0?parseFloat(row[cDesp])||0:0;
-          if(s<=0&&p2<=0&&h2<=0&&v<=0&&sv<=0&&desp<=0)continue;
-          var bsv=s+p2+h2+v+pr;
+          var presAnt=cPresAnt>=0?parseFloat(row[cPresAnt])||0:0;
+          if(s<=0&&p2<=0&&h2<=0&&v<=0&&sv<=0&&desp<=0&&presAnt<=0)continue;
+          var bsv=s+p2+h2+v+pr+presAnt;
           var bag=bsv+sv;
           if(!hist[num])hist[num]={};
           hist[num][iA+'_'+iM]={s:s,bsv:bsv,bag:bag,
-            pres:p2,hext:h2,viat:v,ag_pag:sv,desp:desp};
+            pres:p2,hext:h2,viat:v,ag_pag:sv,desp:desp,presAnt:presAnt};
           var emp=emps.find(function(x){return x.num===num;});
           if(emp){
             // Solo actualizar sueldo nominal si es el mes/año actual del dashboard
